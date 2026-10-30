@@ -2,8 +2,11 @@ from .cesar import ALPHA, clean
 
 
 def playfair_square(key):
+    if not (key.isascii() and key.isalpha()):
+        raise ValueError("la clé Playfair doit contenir uniquement des lettres A-Z (sans espace)")
+    key_letters = key.upper().replace("J", "I")
     letters = []
-    for ch in clean(key).replace("J", "I") + ALPHA.replace("J", ""):
+    for ch in key_letters + ALPHA.replace("J", ""):
         if ch not in letters:
             letters.append(ch)
     return letters
@@ -12,6 +15,7 @@ def playfair_square(key):
 def playfair_prepare(text):
     letters = clean(text).replace("J", "I")
     pairs = []
+    
     padding_positions = []
     i = 0
     while i < len(letters):
@@ -97,12 +101,3 @@ def playfair_strip_padding(text, padding_positions=None):
     if result.endswith("X"):
         result = result[:-1]
     return result
-
-
-def digram_counts(text):
-    letters = clean(text)
-    counts = {}
-    for i in range(0, len(letters) - 1, 2):
-        pair = letters[i:i + 2]
-        counts[pair] = counts.get(pair, 0) + 1
-    return sorted(counts.items(), key=lambda item: -item[1])

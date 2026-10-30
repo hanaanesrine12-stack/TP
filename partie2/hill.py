@@ -72,6 +72,8 @@ def restore_format(text, positions):
     return "".join(result)
 
 def hill_encrypt(text, key):
+    if key == [[1 if row == column else 0 for column in range(len(key))] for row in range(len(key))]:
+        raise ValueError("la matrice identité est interdite : elle ne chiffre pas le message")
     mat_inverse_mod(key)
     letters = clean(text)
     while len(letters) % len(key) != 0:
@@ -85,25 +87,4 @@ def hill_decrypt(text, key):
         raise ValueError("la longueur du chiffré doit être un multiple de %d" % len(key))
     return hill_apply(letters, inverse)
 
-def block_matrix(text, start, n):
-    numbers = [ALPHA.index(c) for c in text[start:start + n * n]]
-    return [[numbers[i * n + j] for i in range(n)] for j in range(n)]
-
-def mat_mul_mod(a, b):
-    size = len(a)
-    return [[sum(a[i][k] * b[k][j] for k in range(size)) % 26 for j in range(size)] for i in range(size)]
-
-def hill_known_plaintext(plain, cipher, n=2):
-    plain = clean(plain)
-    cipher = clean(cipher)
-    if len(plain) < n * n or len(cipher) < n * n:
-        raise ValueError("il faut au moins n*n lettres")
-    for start in range(0, len(plain) - n * n + 1, n):
-        P = block_matrix(plain, start, n)
-        C = block_matrix(cipher, start, n)
-        try:
-            return mat_mul_mod(C, mat_inverse_mod(P))
-        except ValueError:
-            continue
-    raise ValueError("aucun bloc de clair inversible trouvé")
     

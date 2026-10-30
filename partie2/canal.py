@@ -6,7 +6,9 @@ ALGORITHM_CODES = {
 CODE_ALGORITHMS = {code: name for name, code in ALGORITHM_CODES.items()}
 
 
-def build_channel_message(algorithm, direction, ciphertext):
+def build_channel_message(algorithm, direction, ciphertext, key=None):
+    if key is not None and ":" in key:
+        raise ValueError("la clé ne doit pas contenir ':'")
     try:
         code = ALGORITHM_CODES[algorithm]
     except KeyError as error:
@@ -18,14 +20,20 @@ def build_channel_message(algorithm, direction, ciphertext):
             raise ValueError("la direction de César doit être r ou l")
     else:
         direction_code = ""
-    return "%s:%s:%s" % (code, direction_code, ciphertext)
+    if key is None:
+        return "%s:%s:%s" % (code, direction_code, ciphertext)
+    return "%s:%s:%s:%s" % (code, direction_code, key, ciphertext)
 
 
 def decode_channel_message(channel_message):
-    parts = channel_message.split(":", 2)
-    if len(parts) != 3:
+    parts = channel_message.split(":", 3)
+    if len(parts) == 3:
+        code, direction, ciphertext = parts
+        key = ""
+    elif len(parts) == 4:
+        code, direction, key, ciphertext = parts
+    else:
         raise ValueError("message du canal invalide : métadonnées manquantes")
-    code, direction, ciphertext = parts
     try:
         algorithm = CODE_ALGORITHMS[code]
     except KeyError as error:
@@ -37,11 +45,14 @@ def decode_channel_message(channel_message):
         raise ValueError("une direction est interdite pour cet algorithme")
     if not ciphertext:
         raise ValueError("le message chiffré est vide")
-    return algorithm, direction, ciphertext
+    return algorithm, direction, key, ciphertext
 
 
 def dechiffrement_automatique(channel_message, key, hill_key=None):
-    algorithm, direction, ciphertext = decode_channel_message(channel_message)
+    algorithm, direction, channel_key, ciphertext = decode_channel_message(channel_message)
+    key = channel_key or key
+    if not key and hill_key is None:
+        raise ValueError("la clé est requise pour le déchiffrement")
     if algorithm == "Caesar":
         direction_name = "droite" if direction == "r" else "gauche"
         return caesar_decrypt(ciphertext, int(key), direction_name)

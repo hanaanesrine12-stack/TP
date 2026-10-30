@@ -3,6 +3,7 @@ import string
 
 ALPHA = string.ascii_uppercase
 CAESAR_ALPHABET = string.ascii_uppercase + string.ascii_lowercase
+CAESAR_MASK_MARKER = "L"
 
 
 def clean(text):
@@ -29,9 +30,29 @@ def caesar_decrypt(text, n, direction="right"):
     return caesar(text, n, "left")
 
 
-def caesar_frequency_guess(text):
-    letters = clean(text)
-    if not letters:
-        return 0
-    most_common = max(ALPHA, key=letters.count)
-    return (ALPHA.index(most_common) - ALPHA.index("E")) % 26
+def caesar_prepare(text):
+    letters = []
+    mask = []
+    for character in text:
+        if character in CAESAR_ALPHABET:
+            letters.append(character)
+            mask.append(CAESAR_MASK_MARKER)
+        else:
+            mask.append(character)
+    return "".join(letters), "".join(mask)
+
+
+def caesar_restore(text, mask):
+    letters = iter(text)
+    result = []
+    for character in mask:
+        if character == CAESAR_MASK_MARKER:
+            try:
+                result.append(next(letters))
+            except StopIteration as error:
+                raise ValueError("le masque César ne correspond pas au texte") from error
+        else:
+            result.append(character)
+    if next(letters, None) is not None:
+        raise ValueError("le masque César ne correspond pas au texte")
+    return "".join(result)
