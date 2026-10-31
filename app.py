@@ -766,7 +766,7 @@ class MainApp(tk.Tk):
         self.notifications_button.pack(fill="x", pady=4)
         ttk.Separator(self.sidebar).pack(fill="x", pady=12)
         ttk.Button(self.sidebar, text=" Mots de passe", command=lambda: self.show_page("partie3")).pack(fill="x", pady=4)
-        ttk.Button(self.sidebar, text=" Intégrité (HMAC / RSA)", command=lambda: self.show_page("partie4")).pack(fill="x", pady=4)
+        ttk.Button(self.sidebar, text=" Intégrité ", command=lambda: self.show_page("partie4")).pack(fill="x", pady=4)
         ttk.Separator(self.sidebar).pack(fill="x", pady=18)
         ttk.Label(self.sidebar, text="Votre espace est protégé par une connexion authentifiée.",
                   wraplength=180, foreground=COLORS["muted"]).pack(anchor="w")
