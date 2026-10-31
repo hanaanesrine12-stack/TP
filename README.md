@@ -1,10 +1,18 @@
-# Framework de chiffrement (SSAD TP1)
+# Framework de chiffrement (SSAD TP1) — Parties 1, 2 & 3
 
 Travail pratique du cours SSAD, USTHB 2026-2027. Python 3, bibliothèque standard uniquement.
 
-Ce dépôt contient une interface de messagerie entre une entité A (émetteur) et
-une entité B (récepteur), ainsi que les implémentations des chiffrements de la
-partie 2.
+Ce dépôt regroupe dans **une seule interface** :
+
+- **Partie 1 & 2** — interface de messagerie entre une entité A (émetteur) et une
+  entité B (récepteur), avec les chiffrements César, Hill et Playfair.
+- **Partie 3** — gestion des mots de passe : stockage sécurisé, connexion avec
+  verrouillage, et simulation d'attaques (dictionnaire, force brute, combinée).
+
+La logique des deux parties **n'a pas été modifiée**. Les modules `partie2/` et
+`passwords/` sont repris tels quels depuis les dépôts d'origine. L'intégration se
+limite à réunir les deux applications dans un seul `app.py` à deux onglets : la
+partie 3, qui était une fenêtre `tk.Tk` autonome, devient un onglet (`ttk.Frame`).
 
 ## Lancement
 
@@ -17,43 +25,52 @@ python tests_partie2.py
 
 | Fichier | Rôle |
 |---------|------|
-| `partie2/__init__.py` | Package Python de la partie 2 |
-| `partie2/ciphers.py` | Facade commune pour César, Hill, Playfair et leurs outils d'analyse |
-| `partie2/cesar.py` | Chiffrement de César et analyse de fréquence |
-| `partie2/hill.py` | Chiffrement de Hill et attaque à clair connu |
-| `partie2/playfair.py` | Chiffrement de Playfair et comptage des digrammes |
-| `app.py` | Interface Tkinter de messagerie entre A et B |
-| `tests_partie2.py` | Tests des chiffrements |
-| `code_interface.pdf` | Code de la partie 1 |
-| `code_chiffrements.pdf` | Code de la partie 2 avec explications |
-| `report.pdf` | Rapport |
+| `app.py` | Interface Tkinter à deux onglets (Messagerie + Mots de passe) |
+| `partie2/` | Package de la partie 2 (César, Hill, Playfair et leurs outils) |
+| `passwords/` | Package de la partie 3 (stockage, attaques, protection) |
+| `tests_partie2.py` | Tests des chiffrements de la partie 2 |
 
-## Fonctionnement de l'interface
+### Partie 2 — `partie2/`
 
-- L'entité A saisit un message en clair et choisit l'algorithme, la clé et le sens pour César.
-- Le bouton **Chiffrer et envoyer** place le résultat dans le canal.
-- L'entité B récupère le message chiffré et utilise **Déchiffrer** pour afficher le message original.
-- Le canal contient le code binaire de l'algorithme, la direction pour César et le texte chiffré ; il ne contient pas la clé secrète.
-- B reçoit automatiquement l'algorithme et la direction du message, puis saisit sa clé séparément.
-- L'interface ne contient plus d'onglet ni de bouton dédié à la simulation d'attaques.
+| Fichier | Rôle |
+|---------|------|
+| `ciphers.py` | Façade commune pour César, Hill, Playfair et leurs outils d'analyse |
+| `cesar.py` | Chiffrement de César et analyse de fréquence |
+| `hill.py` | Chiffrement de Hill et attaque à clair connu |
+| `playfair.py` | Chiffrement de Playfair et comptage des digrammes |
+| `canal.py` | Encodage/décodage du canal `code:direction:chiffré` |
 
-## Remarques
+### Partie 3 — `passwords/`
 
-- Le code de l'algorithme est une métadonnée publique et ne constitue pas une protection cryptographique.
-- Pour Hill, le canal contient uniquement les lettres chiffrées. Les positions des espaces et de la ponctuation sont mémorisées séparément, puis réutilisées après le déchiffrement.
-- Playfair utilise maintenant la même méthode : le canal contient uniquement les lettres chiffrées, puis les positions mémorisées restaurent les espaces et la ponctuation après le déchiffrement.
-- Playfair mémorise également les positions exactes des `X` ajoutés pendant la préparation des paires. Ainsi, un vrai `X` du message n'est pas supprimé par erreur lors du déchiffrement.
-- Playfair mémorise les positions des `J` remplacés par `I` dans la grille 5x5, puis restaure ces `J` après le déchiffrement. La liste de positions est une métadonnée publique ; la clé secrète n'est pas transmise.
-- Hill peut ajouter `X` pour compléter son dernier bloc, et Playfair peut ajouter `X` pour préparer ses paires. L'interface retire ces remplissages au déchiffrement ; un véritable `X` final peut donc nécessiter une convention supplémentaire.
-- L'interface ne propose pas de fonctionnalité d'attaque par force brute.
-- Le message du canal utilise le format `code:direction:chiffré` : `000` pour César, `001` pour Hill et `010` pour Playfair. La direction vaut `r` ou `l` uniquement pour César. La fonction `dechiffrement_automatique()` lit ces métadonnées et choisit automatiquement le déchiffrement sans transmettre la clé secrète.
-- Les fichiers `code_interface.pdf` et `report.pdf` décrivent une version plus complète (mots de passe, HMAC, `tests.py`) dont les fichiers ne sont pas dans ce dépôt.
+| Fichier | Rôle |
+|---------|------|
+| `charsets.py` | Alphabets et définition des 3 cas du sujet |
+| `crypto.py` | Stockage des identifiants (sel + chiffré César), empreintes de démo |
+| `caesar.py` | Chiffrement César sur ASCII imprimable + dérivation de clé |
+| `dictionary.py` | Attaque par dictionnaire |
+| `brute_force.py` | Attaque par force brute |
+| `attacks.py` | Attaque combinée (dictionnaire puis force brute) |
+| `protection.py` | Politique de robustesse + verrouillage des tentatives |
+| `utils.py` | Fonctions utilitaires partagées |
 
-## Répartition du travail
+## Onglet « Messagerie » (Partie 1 & 2)
 
-| Membre | Tâche |
-|--------|-------|
-| 1 | Chiffrement de César et ses attaques |
-| 2 | Chiffrement de Hill et attaque à clair connu |
-| 3 | Chiffrement de Playfair et analyse des digrammes |
-| 4 | Interface et tests |
+- L'entité A saisit un message en clair, choisit l'algorithme, la clé et le sens (César).
+- **Chiffrer et envoyer** place le résultat dans le canal.
+- L'entité B récupère le message chiffré et utilise **Déchiffrer**.
+- Le canal contient le code binaire de l'algorithme, la direction pour César et le
+  texte chiffré ; la clé secrète n'est pas transmise par le chiffrement lui-même.
+
+## Onglet « Mots de passe » (Partie 3)
+
+- **Zone A (serveur)** : choix du cas du TP (3 car. 0/1, 4 car. 1..4, ou libre),
+  création de compte, affichage du stockage (sel, chiffré) — le mot de passe en
+  clair n'est jamais stocké.
+- **Zone B (utilisateur légitime)** : connexion, mesure du temps de vérification,
+  verrouillage après plusieurs échecs.
+- **Zone C (attaquant hors-ligne)** : attaque par dictionnaire, force brute ou
+  combinée sur le chiffré volé, avec moniteur en temps réel.
+
+## Remarque
+
+La partie 4 (Authenticité / Intégrité) n'est pas incluse dans ce dépôt.

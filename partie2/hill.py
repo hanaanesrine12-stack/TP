@@ -86,5 +86,4 @@ def hill_decrypt(text, key):
     if len(letters) % len(key) != 0:
         raise ValueError("la longueur du chiffré doit être un multiple de %d" % len(key))
     return hill_apply(letters, inverse)
-
     
