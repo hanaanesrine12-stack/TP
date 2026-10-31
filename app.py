@@ -23,6 +23,7 @@ import passwords
 from passwords import caesar, db
 from partie2_interface import Partie2Page, InboxPage, NotificationsPage
 from partie3_interface import Partie3Page
+from partie4_interface import Partie4Page
 
 COLORS = {
     "background": "#EAF3FF",
@@ -765,6 +766,7 @@ class MainApp(tk.Tk):
         self.notifications_button.pack(fill="x", pady=4)
         ttk.Separator(self.sidebar).pack(fill="x", pady=12)
         ttk.Button(self.sidebar, text=" Mots de passe", command=lambda: self.show_page("partie3")).pack(fill="x", pady=4)
+        ttk.Button(self.sidebar, text=" Intégrité (HMAC / RSA)", command=lambda: self.show_page("partie4")).pack(fill="x", pady=4)
         ttk.Separator(self.sidebar).pack(fill="x", pady=18)
         ttk.Label(self.sidebar, text="Votre espace est protégé par une connexion authentifiée.",
                   wraplength=180, foreground=COLORS["muted"]).pack(anchor="w")
@@ -778,6 +780,8 @@ class MainApp(tk.Tk):
             self.current_page = InboxPage(self.content, self.user, self.refresh_notifications)
         elif page_name == "notifications":
             self.current_page = NotificationsPage(self.content, self.user, self.refresh_notifications)
+        elif page_name == "partie4":
+            self.current_page = Partie4Page(self.content, self.user)
         else:
             self.current_page = Partie3Page(self.content)
         self.current_page.pack(fill="both", expand=True)

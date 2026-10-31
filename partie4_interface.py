@@ -1,315 +1,260 @@
-"""Partie 4 — Interface : intégrité d'un message chiffré avec SHA-256.
-
-Entity A (émetteur)  : chiffre le message (César / Playfair / Hill, partie 2),
-                       calcule H = SHA256(C) et envoie C et H sur le canal.
-Canal                : transporte C et H ; l'attaquant peut modifier C
-                       (« Simulate tampering »), « Reset to original » annule.
-Entity B (récepteur) : recalcule H' = SHA256(C'), compare avec H, et ne
-                       déchiffre QUE si H = H'.
-
-C est le message chiffré tel que transmis par la partie 2
-(« code algo : sens : clé : texte chiffré »), pour que B puisse déchiffrer
-automatiquement et pour que l'algorithme et la clé soient eux aussi protégés.
-"""
 
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 import database
-from partie2 import ciphers
-from partie2_interface import COLORS, _auto_decrypt, _get_text, _set_text
-from partie4 import integrity
+from partie4 import integrity as integrite
 
-DANGER = "#C0392B"
-
-
-def _hill_key_matrix(key_text):
-    try:
-        numbers = [int(value.strip()) for value in key_text.split(",")]
-    except ValueError as error:
-        raise ValueError("La clé Hill doit être des entiers séparés par des virgules (ex: 3,3,2,5).") from error
-    size = int(len(numbers) ** 0.5)
-    if size < 2 or size * size != len(numbers):
-        raise ValueError("La clé Hill doit former une matrice carrée (ex: 3,3,2,5).")
-    return [numbers[index:index + size] for index in range(0, len(numbers), size)]
+BG = "#FFFFFF"
+PANEL = "#FFFFFF"
+FIELD = "#F4F8FD"
+LABEL_BG = "#EAF3FF"
+BLUE = "#2F75D6"
+DARK = "#1D2A3A"
+GREEN_TEXT = "#176B3A"
+RED = "#C0392B"
+GREY = "#637083"
+BORDER = "#C5D6EA"
+FONT = "Segoe UI"
 
 
-def _raw(box):
-    """Contenu exact d'une zone de texte (sans strip : les espaces comptent dans le hash)."""
-    return box.get("1.0", "end-1c")
+def set_text(box, text):
+    box.config(state="normal")
+    box.delete("1.0", "end")
+    box.insert("1.0", text)
+    box.config(state="disabled")
 
 
-def _make_box(parent, height, code=False, readonly=False):
-    box = tk.Text(parent, height=height, width=18, wrap="char" if code else "word",
-                  relief="flat", highlightthickness=1,
-                  bg=COLORS["surface_dark"] if code else COLORS["surface"],
-                  fg=COLORS["code"] if code else COLORS["text"],
-                  insertbackground=COLORS["text"],
-                  highlightbackground=COLORS["border"],
-                  font=("Consolas", 9) if code else ("Segoe UI", 10))
-    if readonly:
+def get_text(box):
+    return box.get("1.0", "end").strip()
+
+
+def field_label(parent, text):
+    tk.Label(parent, text=text, bg=LABEL_BG, fg=GREY, font=(FONT, 9), anchor="w").pack(
+        fill="x", pady=(6, 1)
+    )
+
+
+def code_box(parent, height, editable=False):
+    box = tk.Text(
+        parent, height=height, width=18, wrap="char", bg=FIELD, fg=GREEN_TEXT, relief="flat",
+        highlightthickness=1, highlightbackground=BORDER, font=("Consolas", 9), padx=4, pady=4,
+    )
+    box.pack(fill="x")
+    if not editable:
         box.config(state="disabled")
     return box
 
 
-def _caption(parent, text):
-    ttk.Label(parent, text=text, foreground=COLORS["muted"]).pack(anchor="w", pady=(8, 2))
+def blue_button(parent, text, command):
+    return tk.Button(
+        parent, text=text, command=command, bg=BLUE, fg="white", activebackground="#245fb0",
+        activeforeground="white", relief="flat", font=(FONT, 9, "bold"), pady=6, cursor="hand2",
+    )
 
 
-class Partie4Page(ttk.Frame):
-    """Démonstrateur : chiffrement -> SHA-256 -> canal (attaquable) -> vérification -> déchiffrement."""
+def light_button(parent, text, command):
+    return tk.Button(
+        parent, text=text, command=command, bg=FIELD, fg=DARK, relief="solid", bd=1,
+        font=(FONT, 9), pady=4, cursor="hand2",
+    )
 
-    def __init__(self, parent, user):
-        super().__init__(parent, padding=14)
-        self.user = user
-        self.original_message = ""   # C tel qu'envoyé par A
-        self.original_hash = ""      # H tel qu'envoyé par A
-        self._build()
+
+class Partie4Page(tk.Frame):
+    """A envoie C et H = SHA256(C) ; B recalcule H' = SHA256(C') et ne
+    déchiffre que si H = H'."""
+
+    def __init__(self, parent, user=None):
+        super().__init__(parent, bg=BG)
+        self.user = user or {}
+        self.chiffrement = integrite.Chiffrement()
+        self.original = None
+        body = self.build_scroll_area()
+        tk.Label(body, text="Partie 4 — Intégrité avec SHA-256", bg=BG, fg=DARK,
+                 font=(FONT, 16, "bold")).pack(anchor="w")
+        columns = tk.Frame(body, bg=BG)
+        columns.pack(fill="both", expand=True)
+        for i in range(3):
+            columns.columnconfigure(i, weight=1, uniform="col")
+        columns.rowconfigure(0, weight=1)
+        self.build_entity_a(self.column(columns, 0, "Entité A — Émetteur"))
+        self.build_channel(self.column(columns, 1, "Canal"))
+        self.build_entity_b(self.column(columns, 2, "Entité B — Récepteur"))
+        self.change_algorithm()
         self.refresh_users()
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
-    def _build(self):
-        ttk.Label(self, text="Partie 4 — Intégrité avec SHA-256",
-                  font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        ttk.Label(self, text="Alice envoie C et H = SHA256(C). Bob recalcule H' = SHA256(C') : "
-                             "il ne déchiffre que si H = H'.",
-                  foreground=COLORS["muted"]).pack(anchor="w", pady=(3, 10))
+    def build_scroll_area(self):
+        """La fenêtre de l'application fait 720 px de haut : la page défile verticalement."""
+        canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        body = tk.Frame(canvas, bg=BG, padx=14, pady=14)
+        window = canvas.create_window(0, 0, window=body, anchor="nw")
+        body.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
+        wheel = lambda e: canvas.yview_scroll(-int(e.delta / 120), "units")
+        self.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", wheel))
+        self.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        self.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>") if e.widget is self else None)
+        self.canvas = canvas
+        return body
 
-        body = ttk.Frame(self)
-        body.pack(fill="both", expand=True)
-        for column in range(3):
-            body.columnconfigure(column, weight=1, uniform="p4")
-        body.rowconfigure(0, weight=1)
+    def column(self, parent, index, title):
+        frame = tk.LabelFrame(parent, text=title, bg=PANEL, fg=DARK, font=(FONT, 9, "bold"),
+                              relief="solid", bd=1, labelanchor="nw")
+        frame.grid(row=0, column=index, sticky="nsew", padx=5)
+        inner = tk.Frame(frame, bg=PANEL)
+        inner.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        return inner
 
-        self.frame_a = ttk.LabelFrame(body, text="Entity A — Sender", padding=10)
-        self.frame_a.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        self.frame_c = ttk.LabelFrame(body, text="Transmission Channel", padding=10)
-        self.frame_c.grid(row=0, column=1, sticky="nsew", padx=6)
-        self.frame_b = ttk.LabelFrame(body, text="Entity B — Receiver", padding=10)
-        self.frame_b.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
-
-        self._build_sender(self.frame_a)
-        self._build_channel(self.frame_c)
-        self._build_receiver(self.frame_b)
-
-    def _build_sender(self, frame):
-        _caption(frame, "Récepteur")
-        row = ttk.Frame(frame)
+    def build_entity_a(self, frame):
+        field_label(frame, "Récepteur")
+        row = tk.Frame(frame, bg=PANEL)
         row.pack(fill="x")
         self.receiver = ttk.Combobox(row, state="readonly", width=12)
         self.receiver.pack(side="left", fill="x", expand=True)
         ttk.Button(row, text="↻", width=3, command=self.refresh_users).pack(side="left", padx=(6, 0))
-
-        _caption(frame, "Algorithme")
-        self.algorithm = ttk.Combobox(frame, state="readonly", values=("Caesar", "Playfair", "Hill"))
+        field_label(frame, "Algorithme")
+        self.algorithm = ttk.Combobox(frame, values=integrite.ALGORITHMES, state="readonly")
         self.algorithm.current(0)
         self.algorithm.pack(fill="x")
         self.algorithm.bind("<<ComboboxSelected>>", self.change_algorithm)
-
-        _caption(frame, "Clé de chiffrement")
-        self.key = ttk.Entry(frame)
-        self.key.pack(fill="x")
-        _caption(frame, "Sens (César)")
-        self.direction = ttk.Combobox(frame, state="readonly", values=("droite", "gauche"))
+        field_label(frame, "Clé de chiffrement")
+        self.key = tk.Entry(frame, bg=FIELD, relief="flat", highlightthickness=1,
+                            highlightbackground=BORDER, font=(FONT, 9))
+        self.key.pack(fill="x", ipady=2)
+        field_label(frame, "Sens (César)")
+        self.direction = ttk.Combobox(frame, values=["droite", "gauche"], state="readonly")
         self.direction.current(0)
         self.direction.pack(fill="x")
-        self.change_algorithm()
-
-        _caption(frame, "Message original")
-        self.message = _make_box(frame, 3)
+        field_label(frame, "Message original")
+        self.message = tk.Text(frame, height=2, width=18, wrap="word", bg=PANEL, relief="flat",
+                               highlightthickness=1, highlightbackground=BORDER, font=(FONT, 9),
+                               padx=4, pady=4)
         self.message.pack(fill="x")
         self.message.insert("1.0", "Retrouve-moi a la bibliotheque a midi")
+        blue_button(frame, "\U0001F512  Chiffrer et envoyer", self.send).pack(fill="x", pady=(8, 0))
+        field_label(frame, "Message chiffré généré")
+        self.cipher_a = code_box(frame, 3)
+        field_label(frame, "Hash SHA-256")
+        self.hash_a = code_box(frame, 4)
 
-        ttk.Button(frame, text="🔒 Chiffrer et envoyer", style="Primary.TButton",
-                   command=self.send).pack(fill="x", pady=(10, 0))
+    def build_channel(self, frame):
+        field_label(frame, "Message chiffré (C) — modifiable")
+        self.channel_c = code_box(frame, 3, editable=True)
+        field_label(frame, "Hash transmis (H)")
+        self.channel_h = code_box(frame, 4)
+        light_button(frame, "⚠  Modifier le message", self.tamper).pack(fill="x", pady=(12, 4))
+        light_button(frame, "↻  Réinitialiser", self.reset).pack(fill="x")
+        self.channel_status = tk.Label(frame, bg=PANEL, fg=RED, font=(FONT, 9), justify="left",
+                                       anchor="w", wraplength=230)
+        self.channel_status.pack(fill="x", pady=(10, 0))
 
-        _caption(frame, "Message chiffré généré")
-        self.cipher_box = _make_box(frame, 3, code=True, readonly=True)
-        self.cipher_box.pack(fill="x")
-        _caption(frame, "Generated SHA-256 Hash")
-        self.hash_box = _make_box(frame, 3, code=True, readonly=True)
-        self.hash_box.pack(fill="x")
-
-    def _build_channel(self, frame):
-        _caption(frame, "Message chiffré (C)")
-        self.channel_c = _make_box(frame, 5, code=True, readonly=True)
-        self.channel_c.pack(fill="x")
-        _caption(frame, "Hash transmis (H)")
-        self.channel_h = _make_box(frame, 3, code=True, readonly=True)
-        self.channel_h.pack(fill="x")
-
-        ttk.Button(frame, text="⚠ Simulate tampering", command=self.simulate_tampering).pack(fill="x", pady=(14, 4))
-        ttk.Button(frame, text="↺ Reset to original", command=self.reset_to_original).pack(fill="x")
-
-        self.channel_info = ttk.Label(frame, text="Aucun message sur le canal.",
-                                      foreground=COLORS["muted"], wraplength=250, justify="left")
-        self.channel_info.pack(anchor="w", pady=(12, 0))
-
-    def _build_receiver(self, frame):
-        _caption(frame, "Message chiffré reçu (C')")
-        self.received_c = _make_box(frame, 4, code=True, readonly=True)
-        self.received_c.pack(fill="x")
-        _caption(frame, "Hash reçu (H)")
-        self.received_h = _make_box(frame, 3, code=True, readonly=True)
-        self.received_h.pack(fill="x")
-        _caption(frame, "Computed SHA-256 Hash (H')")
-        self.computed_h = _make_box(frame, 3, code=True, readonly=True)
-        self.computed_h.pack(fill="x")
-
-        ttk.Button(frame, text="🔓 Vérifier et déchiffrer", style="Primary.TButton",
-                   command=self.verify_and_decrypt).pack(fill="x", pady=(10, 0))
-        self.verdict = ttk.Label(frame, text="Aucun message reçu.", foreground=COLORS["muted"],
-                                 font=("Segoe UI", 10, "bold"), wraplength=250, justify="left")
-        self.verdict.pack(anchor="w", pady=(8, 0))
-
-        _caption(frame, "Message déchiffré")
-        self.decrypted = _make_box(frame, 3, readonly=True)
-        self.decrypted.pack(fill="x")
-
-    # ------------------------------------------------------------------
-    # Entity A
-    # ------------------------------------------------------------------
-    def change_algorithm(self, event=None):
-        defaults = {"Caesar": ("3", "readonly"), "Playfair": ("monarchy", "disabled"),
-                    "Hill": ("3,3,2,5", "disabled")}
-        key, direction_state = defaults[self.algorithm.get()]
-        self.key.delete(0, "end")
-        self.key.insert(0, key)
-        self.direction.config(state=direction_state)
+    def build_entity_b(self, frame):
+        field_label(frame, "Message chiffré reçu (C')")
+        self.cipher_b = code_box(frame, 3)
+        field_label(frame, "Hash reçu (H)")
+        self.hash_b = code_box(frame, 4)
+        field_label(frame, "Hash calculé (H')")
+        self.hash_computed = code_box(frame, 4)
+        blue_button(frame, "\U0001F513  Vérifier et déchiffrer", self.verify).pack(fill="x", pady=(12, 0))
+        self.status = tk.Label(frame, bg=PANEL, font=(FONT, 9, "bold"), justify="left", anchor="w",
+                               wraplength=230)
+        self.status.pack(fill="x", pady=(8, 0))
+        field_label(frame, "Message déchiffré")
+        self.result = tk.Text(frame, height=2, width=18, wrap="word", bg=PANEL, relief="flat",
+                              highlightthickness=1, highlightbackground=BORDER, font=(FONT, 9),
+                              padx=4, pady=4, state="disabled")
+        self.result.pack(fill="x")
 
     def refresh_users(self):
+        """Récepteurs : les autres comptes de la base ; « Entité B » si la base est injoignable."""
         try:
             users = [row["pseudo"] for row in database.list_users()
                      if row["pseudo"] != self.user.get("pseudo")]
-        except database.DatabaseError as error:
-            messagebox.showerror("Destinataires", str(error))
+        except database.DatabaseError:
             users = []
-        self.receiver["values"] = users
-        if users:
-            self.receiver.current(0)
+        self.receiver["values"] = users or ["Utilisateur"]
+        self.receiver.current(0)
 
-    def _encrypt(self, text, name, key, direction):
-        if name == "Caesar":
-            try:
-                shift = int(key)
-            except ValueError as error:
-                raise ValueError("La clé César doit être un entier.") from error
-            return ciphers.caesar(text, shift, direction)
-        if name == "Hill":
-            return ciphers.hill_encrypt(text, _hill_key_matrix(key))
-        return ciphers.playfair_encrypt(text, key)
+    def change_algorithm(self, event=None):
+        name = self.algorithm.get()
+        self.key.delete(0, "end")
+        self.key.insert(0, integrite.CLES_PAR_DEFAUT[name])
+        self.direction.config(state="readonly" if name == "Caesar" else "disabled")
+
+    def set_channel_c(self, text):
+        self.channel_c.delete("1.0", "end")
+        self.channel_c.insert("1.0", text)
+
+    def show_received(self, c, h):
+        set_text(self.cipher_b, c)
+        set_text(self.hash_b, h)
+        set_text(self.hash_computed, "")
+        set_text(self.result, "")
+        self.status.config(text="")
 
     def send(self):
-        text = _get_text(self.message)
-        name = self.algorithm.get()
-        key = self.key.get().strip()
-        if not self.receiver.get():
-            messagebox.showwarning("Message", "Choisissez un récepteur.")
+        message = get_text(self.message)
+        if not message:
+            messagebox.showerror("Erreur", "Le message est vide.")
             return
-        if not ciphers.clean(text):
-            messagebox.showwarning("Message", "Le message doit contenir au moins une lettre.")
-            return
-        direction = self.direction.get() if name == "Caesar" else ""
         try:
-            encrypted = self._encrypt(text, name, key, direction)
-            channel_message = ciphers.build_channel_message(name, direction, encrypted, key)
+            c, h = integrite.envoyer(self.chiffrement, self.algorithm.get(), message,
+                                     self.key.get().strip(), self.direction.get())
         except ValueError as error:
-            messagebox.showerror("Chiffrement impossible", str(error))
+            messagebox.showerror("Erreur", str(error))
             return
+        self.original = (c, h)
+        set_text(self.cipher_a, c)
+        set_text(self.hash_a, h)
+        self.set_channel_c(c)
+        set_text(self.channel_h, h)
+        self.channel_status.config(fg=GREEN_TEXT, text="Message envoyé. Canal intact.")
+        self.show_received(c, h)
 
-        digest = integrity.sha256_hex(channel_message)          # H = SHA256(C)
-        self.original_message, self.original_hash = channel_message, digest
-        _set_text(self.cipher_box, channel_message)
-        _set_text(self.hash_box, digest)
-        self._publish(channel_message, digest)
-        self.channel_info.config(text="Message envoyé à %s. Canal intact." % self.receiver.get(),
-                                 foreground=COLORS["success"])
-
-    # ------------------------------------------------------------------
-    # Canal
-    # ------------------------------------------------------------------
-    def _publish(self, message, digest):
-        """Met C et H sur le canal puis les délivre à B."""
-        _set_text(self.channel_c, message)
-        _set_text(self.channel_h, digest)
-        self._deliver()
-
-    def _deliver(self):
-        """B reçoit C' et H, et calcule tout de suite H' = SHA256(C')."""
-        received = _raw(self.channel_c)
-        _set_text(self.received_c, received)
-        _set_text(self.received_h, _raw(self.channel_h))
-        _set_text(self.computed_h, integrity.sha256_hex(received))
-        _set_text(self.decrypted, "")
-        self.verdict.config(text="Message reçu : cliquez sur « Vérifier et déchiffrer ».",
-                            foreground=COLORS["muted"])
-
-    @staticmethod
-    def _mutate(value):
-        """Change un seul caractère (première lettre ou chiffre). Retourne (nouveau, index, ancien, nouveau_car)."""
-        for index, char in enumerate(value):
-            if char.isascii() and char.isalpha():
-                base = "A" if char.isupper() else "a"
-                new_char = chr((ord(char) - ord(base) + 1) % 26 + ord(base))
-            elif char.isdigit():
-                new_char = str((int(char) + 1) % 10)
-            else:
-                continue
-            return value[:index] + new_char + value[index + 1:], index + 1, char, new_char
-        return None
-
-    def simulate_tampering(self):
-        if not self.original_message:
-            messagebox.showinfo("Canal", "Aucun message sur le canal : chiffrez et envoyez d'abord un message.")
+    def tamper(self):
+        if self.original is None:
+            messagebox.showerror("Erreur", "Aucun message n'a été envoyé.")
             return
-        # C = « code : sens : clé : texte chiffré » -> l'attaquant modifie le texte chiffré.
-        parts = _raw(self.channel_c).split(":", 3)
-        mutated = self._mutate(parts[3]) if len(parts) == 4 else None
-        if mutated is None:
-            messagebox.showinfo("Canal", "Impossible de modifier ce message.")
-            return
-        parts[3], position, old, new = mutated
-        _set_text(self.channel_c, ":".join(parts))
-        self._deliver()          # le hash H, lui, n'est pas modifié
-        self.channel_info.config(
-            text="⚠ Modifié en transit : caractère n°%d du chiffré « %s » → « %s ». "
-                 "Le hash transmis est resté celui d'origine." % (position, old, new),
-            foreground=DANGER)
-
-    def reset_to_original(self):
-        if not self.original_message:
-            messagebox.showinfo("Canal", "Aucun message envoyé.")
-            return
-        self._publish(self.original_message, self.original_hash)
-        self.channel_info.config(text="Message d'origine restauré sur le canal.",
-                                 foreground=COLORS["success"])
-
-    # ------------------------------------------------------------------
-    # Entity B
-    # ------------------------------------------------------------------
-    def verify_and_decrypt(self):
-        received = _raw(self.received_c)
-        if not received:
-            messagebox.showinfo("Réception", "Aucun message reçu.")
-            return
-        sent_hash = _raw(self.received_h)
-        _set_text(self.computed_h, integrity.sha256_hex(received))   # H'
-        _set_text(self.decrypted, "")
-
-        if not integrity.verify_hash(received, sent_hash):           # H != H'
-            self.verdict.config(
-                text="❌ Message modifié : H ≠ H'. Déchiffrement bloqué.", foreground=DANGER)
-            return
-
         try:
-            algorithm, plaintext = _auto_decrypt(received)
+            c, index, old, new = integrite.falsifier(get_text(self.channel_c))
         except ValueError as error:
-            self.verdict.config(text="⚠ Intégrité vérifiée, mais déchiffrement impossible.",
-                                foreground=DANGER)
-            messagebox.showerror("Déchiffrement", str(error))
+            messagebox.showerror("Erreur", str(error))
             return
-        self.verdict.config(text="✅ Intégrité vérifiée : H = H'. Déchiffré (%s)." % algorithm,
-                            foreground=COLORS["success"])
-        _set_text(self.decrypted, plaintext)
+        self.set_channel_c(c)
+        self.channel_status.config(
+            fg=RED,
+            text="⚠  Modifié en transit : caractère n°%d du chiffré « %s » → « %s ». "
+                 "Le hash transmis est resté celui d'origine." % (index, old, new),
+        )
+        self.show_received(c, get_text(self.channel_h))
+
+    def reset(self):
+        if self.original is None:
+            return
+        c, h = self.original
+        self.set_channel_c(c)
+        set_text(self.channel_h, h)
+        self.channel_status.config(fg=GREEN_TEXT, text="Canal rétabli : message d'origine.")
+        self.show_received(c, h)
+
+    def verify(self):
+        if self.original is None:
+            messagebox.showerror("Erreur", "Aucun message n'a été envoyé.")
+            return
+        c, h = get_text(self.channel_c), get_text(self.channel_h)
+        self.show_received(c, h)
+        try:
+            ok, h_computed, plain = integrite.recevoir(self.chiffrement, c, h, self.key.get().strip())
+        except ValueError as error:
+            messagebox.showerror("Erreur", str(error))
+            return
+        set_text(self.hash_computed, h_computed)
+        if ok:
+            self.status.config(fg=GREEN_TEXT, text="✔  Message intègre : H = H'.\nDéchiffrement autorisé.")
+            set_text(self.result, plain)
+        else:
+            self.status.config(fg=RED, text="✖  Message modifié : H ≠ H'.\nDéchiffrement bloqué.")
