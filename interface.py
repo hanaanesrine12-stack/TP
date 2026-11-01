@@ -3,7 +3,7 @@ import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-import database      # MySQL : voir database.py
+import database
 
 COLORS = {
     "background": "#EAF3FF",
@@ -30,9 +30,6 @@ def is_visible_ascii(text):
     return all(33 <= ord(c) <= 126 for c in text)
 
 
-# ===========================================================================
-# Style (mêmes couleurs que app.py)
-# ===========================================================================
 def configure_style(window):
     c = COLORS
     style = ttk.Style(window)
@@ -67,13 +64,10 @@ def configure_style(window):
               foreground=[("active", c["accent_hover"])])
 
 
-# ===========================================================================
-# Captcha
-# ===========================================================================
 class Captcha(tk.Canvas):
     """Code de 5 caractères déformé (position, taille, angle, bruit)."""
 
-    ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"    # sans O/0 ni I/1 (ambigus)
+    ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     INKS = ["#1D2A3A", "#2F75D6", "#176B3A", "#8A3FB5", "#B3402A"]
 
     def __init__(self, parent, length=5, width=190, height=56):
@@ -95,10 +89,10 @@ class Captcha(tk.Canvas):
     def refresh(self):
         self.code = "".join(rng.choice(self.ALPHABET) for _ in range(self.length))
         self.delete("all")
-        for _ in range(70):                       # points
+        for _ in range(70):
             x, y = rng.randint(0, self.canvas_w), rng.randint(0, self.canvas_h)
             self.create_oval(x, y, x + 2, y + 2, fill=COLORS["border"], outline="")
-        for _ in range(4):                        # lignes derrière le texte
+        for _ in range(4):
             self._noise_line(COLORS["border"])
         step = self.canvas_w / (self.length + 1)
         for i, char in enumerate(self.code):
@@ -110,16 +104,13 @@ class Captcha(tk.Canvas):
                 fill=rng.choice(self.INKS),
                 font=("Segoe UI", rng.randint(20, 26), "bold"),
             )
-        for _ in range(2):                        # lignes par-dessus le texte
+        for _ in range(2):
             self._noise_line(rng.choice(self.INKS))
 
     def check(self, answer):
         return answer.strip().upper() == self.code
 
 
-# ===========================================================================
-# Formulaire de base
-# ===========================================================================
 class AuthForm(ttk.Frame):
     def __init__(self, parent, app, title):
         super().__init__(parent, style="Card.TFrame", padding=24)
@@ -183,9 +174,6 @@ class AuthForm(ttk.Frame):
         raise NotImplementedError
 
 
-# ===========================================================================
-# Page : Connexion
-# ===========================================================================
 class LoginForm(AuthForm):
     def __init__(self, parent, app, prefill="", notice=""):
         super().__init__(parent, app, "Connexion")
@@ -223,9 +211,6 @@ class LoginForm(AuthForm):
         self.app.login_success(user)
 
 
-# ===========================================================================
-# Page : Créer un compte
-# ===========================================================================
 class SignupForm(AuthForm):
     def __init__(self, parent, app):
         super().__init__(parent, app, "Créer un compte")
@@ -270,9 +255,6 @@ class SignupForm(AuthForm):
         self.app.show_login(prefill=username, notice="Compte créé. Tu peux te connecter.")
 
 
-# ===========================================================================
-# Fenêtre
-# ===========================================================================
 class AuthApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -344,7 +326,7 @@ def launch_main_app(user):
     import inspect
     import app
     if "user" in inspect.signature(app.main).parameters:
-        app.main(user)        # si app.main(user=None) accepte l'utilisateur
+        app.main(user)
     else:
         app.main()
 

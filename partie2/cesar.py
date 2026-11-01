@@ -6,6 +6,12 @@ CAESAR_ALPHABET = string.ascii_uppercase + string.ascii_lowercase
 CAESAR_MASK_MARKER = "L"
 
 
+def validate_key(key):
+    if not 1 <= key <= 50 or key == 26:
+        raise ValueError("la clé César doit être comprise entre 1 et 50, sauf 26")
+    return key
+
+
 def clean(text):
     return "".join(c for c in text.upper() if c in ALPHA)
 

@@ -13,6 +13,7 @@ from .cesar import (
     caesar_decrypt,
     caesar_restore,
     clean,
+    validate_key,
 )
 from .hill import (
     det,

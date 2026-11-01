@@ -133,9 +133,6 @@ def fmt_duration(seconds):
 CASES = passwords.CASES
 
 
-# ===========================================================================
-# ONGLET MESSAGERIE — Partie 1 & 2
-# ===========================================================================
 class MessagingTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent, padding=10)
@@ -239,8 +236,7 @@ class MessagingTab(ttk.Frame):
                 shift = int(key)
             except ValueError as error:
                 raise ValueError("la clé César doit être un entier") from error
-            if shift % 52 == 0:
-                raise ValueError("clé César trop faible : le message ne serait pas suffisamment chiffré")
+            ciphers.validate_key(shift)
             letters, caesar_mask = ciphers.caesar_prepare(text)
             encrypted = ciphers.caesar(letters, shift, self.direction.get())
             self.caesar_mask = caesar_mask
@@ -351,9 +347,6 @@ class MessagingTab(ttk.Frame):
         set_text(self.result_box, decrypted)
 
 
-# ===========================================================================
-# ONGLET MOTS DE PASSE — Partie 3
-# ===========================================================================
 class PasswordsTab(ttk.Frame):
     """Onglet reprenant la fenêtre `App` de la partie 3 (zones A, B, C)."""
 
@@ -409,9 +402,6 @@ class PasswordsTab(ttk.Frame):
         self.zone_c.reset()
 
 
-# ===========================================================================
-# ZONE A — Le serveur
-# ===========================================================================
 class ZoneA(ttk.LabelFrame):
     def __init__(self, parent, app):
         super().__init__(parent, text="ZONE A — Le serveur", padding=8)
@@ -451,9 +441,6 @@ class ZoneA(ttk.LabelFrame):
 
         ttk.Button(self, text="Créer le compte", command=self.create_account).pack(fill="x", pady=(0, 8))
 
-        # -----------------------------------------------------------
-        # BASE DE DONNÉES (STOCKAGE)
-        # -----------------------------------------------------------
         ttk.Label(self, text="Base de données (stockage) :", font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
         storage = ttk.Frame(self)
         storage.pack(fill="x", pady=(2, 6))
@@ -597,9 +584,6 @@ class ZoneA(ttk.LabelFrame):
         self.update_strength()
 
 
-# ===========================================================================
-# ZONE B — L'utilisateur légitime
-# ===========================================================================
 class ZoneB(ttk.LabelFrame):
     def __init__(self, parent, app):
         super().__init__(parent, text="ZONE B — L'utilisateur légitime", padding=8)
@@ -663,9 +647,6 @@ class ZoneB(ttk.LabelFrame):
         self.time_label.config(text="—")
 
 
-# ===========================================================================
-# ZONE C — L'attaquant
-# ===========================================================================
 class ZoneC(ttk.LabelFrame):
     def __init__(self, parent, app):
         super().__init__(parent, text="ZONE C — L'attaquant", padding=8)
@@ -727,6 +708,7 @@ class MainApp(tk.Tk):
     def __init__(self, user):
         super().__init__()
         self.user = user
+        self.logged_out = False
         self.title("CryptoLink")
         self.geometry("1100x720")
         self.minsize(900, 600)
@@ -809,19 +791,21 @@ class MainApp(tk.Tk):
 
     def logout(self, dialog):
         dialog.destroy()
+        self.logged_out = True
         self.destroy()
-        from interface import run_auth
-        run_auth()
 
 
 def main(user=None):
     if user is None:
         from interface import run_auth
         user = run_auth()
-    if user is None:
-        return
-    root = MainApp(user)
-    root.mainloop()
+    while user is not None:
+        root = MainApp(user)
+        root.mainloop()
+        if not root.logged_out:
+            return
+        from interface import run_auth
+        user = run_auth()
 
 
 if __name__ == "__main__":

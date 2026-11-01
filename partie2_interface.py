@@ -34,7 +34,7 @@ def _get_text(box):
     return box.get("1.0", "end").strip()
 
 
-def _auto_decrypt(channel_message):
+def _auto_decrypt(channel_message, metadata=None):
     """Déchiffre un message du canal avec les fonctions déjà existantes dans
     ciphers.py (decode_channel_message / dechiffrement_automatique), sans rien
     demander au destinataire : la clé est déjà intégrée dans le message."""
@@ -47,6 +47,22 @@ def _auto_decrypt(channel_message):
             raise ValueError("la clé Hill intégrée au message est invalide")
         hill_key = [numbers[index:index + size] for index in range(0, len(numbers), size)]
     plaintext = ciphers.dechiffrement_automatique(channel_message, key, hill_key=hill_key)
+    metadata = metadata or {}
+    if algorithm == "Caesar" and metadata.get("caesar_mask"):
+        plaintext = ciphers.caesar_restore(plaintext, metadata["caesar_mask"])
+    elif algorithm == "Hill":
+        padding = metadata.get("hill_padding", 0)
+        if padding:
+            plaintext = plaintext[:-int(padding)]
+        plaintext = ciphers.restore_format(plaintext, metadata.get("format_positions", []))
+    elif algorithm == "Playfair":
+        plaintext = ciphers.playfair_strip_padding(
+            plaintext, metadata.get("playfair_padding_positions")
+        )
+        plaintext = ciphers.playfair_restore_j(
+            plaintext, metadata.get("playfair_j_positions", [])
+        )
+        plaintext = ciphers.restore_format(plaintext, metadata.get("format_positions", []))
     return algorithm, plaintext
 
 
@@ -124,19 +140,31 @@ class Partie2Page(ttk.Frame):
     def _encrypt(self, text):
         name = self.algorithm.get()
         key = self.key.get().strip()
+        metadata = {}
         if name == "Caesar":
-            encrypted = ciphers.caesar(text, int(key), self.direction.get())
+            try:
+                shift = ciphers.validate_key(int(key))
+            except ValueError as error:
+                raise ValueError(str(error)) from error
+            letters, mask = ciphers.caesar_prepare(text)
+            encrypted = ciphers.caesar(letters, shift, self.direction.get())
+            metadata["caesar_mask"] = mask
         elif name == "Hill":
             numbers = [int(value.strip()) for value in key.split(",")]
             size = int(len(numbers) ** 0.5)
             if size * size != len(numbers):
                 raise ValueError("La matrice Hill doit être carrée.")
             hill_key = [numbers[index:index + size] for index in range(0, len(numbers), size)]
+            metadata["format_positions"] = ciphers.format_positions(text.upper())
+            metadata["hill_padding"] = (-len(ciphers.clean(text))) % len(hill_key)
             encrypted = ciphers.hill_encrypt(text, hill_key)
         else:
+            metadata["format_positions"] = ciphers.format_positions(text.upper())
+            metadata["playfair_padding_positions"] = ciphers.playfair_prepare(text)[1]
+            metadata["playfair_j_positions"] = ciphers.playfair_j_positions(text)
             encrypted = ciphers.playfair_encrypt(text, key)
         direction = self.direction.get() if name == "Caesar" else ""
-        return ciphers.build_channel_message(name, direction, encrypted, key)
+        return ciphers.build_channel_message(name, direction, encrypted, key), metadata
 
     def send(self):
         text = _get_text(self.message)
@@ -145,8 +173,8 @@ class Partie2Page(ttk.Frame):
             messagebox.showwarning("Message", "Choisissez un récepteur et saisissez un message.")
             return
         try:
-            channel_message = self._encrypt(text)
-            database.send_message(self.user["pseudo"], recipient, channel_message)
+            channel_message, metadata = self._encrypt(text)
+            database.send_message(self.user["pseudo"], recipient, channel_message, metadata=metadata)
         except (ValueError, database.DatabaseError) as error:
             messagebox.showerror("Envoi impossible", str(error))
             return
@@ -232,11 +260,12 @@ class InboxPage(ttk.Frame):
         text_label.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         channel_message = message["channel_message"]
+        metadata = message.get("metadata") or {}
 
         def toggle():
             if action["text"] == "Déchiffrer":
                 try:
-                    algorithm, plaintext = _auto_decrypt(channel_message)
+                    algorithm, plaintext = _auto_decrypt(channel_message, metadata)
                 except ValueError as error:
                     messagebox.showerror("Déchiffrement", str(error))
                     return

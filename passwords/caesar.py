@@ -1,29 +1,10 @@
-"""
-César cipher on printable ASCII + key-derivation function f.
 
-Design summary
---------------
-- Cipher     : generalized César on ASCII codes 32..126 (95 symbols).
-- Key f      : h = (h * 31 + b) % 95, folded over MASTER || PEPPER || salt.
-- Secrets    : MASTER and PEPPER live OUTSIDE the database (env vars).
-- Stored     : {salt, ciphertext}.  The key is never written anywhere.
-
-No stretching, no constant-time comparison — kept minimal on purpose.
-
-WARNING (for the report)
-------------------------
-A cipher is reversible.  This design is the best possible under the
-"cipher only, no hashing" constraint, but it is NOT production-grade.
-Use PBKDF2 / bcrypt / Argon2 in real systems.
-"""
 import os
 
 # --- Printable ASCII range -------------------------------------------------
 ASCII_FIRST = 32          # space
 ASCII_LAST  = 126         # '~'
 ASCII_MOD   = ASCII_LAST - ASCII_FIRST + 1   # = 95
-
-# --- Secrets (loaded from environment, NEVER from the database) ----------
 # Set these before launching app.py, for example:
 #   export SSAD_MASTER="a3f19c2b74e8d05f613b9a2c4f7e8d10"
 #   export SSAD_PEPPER="5c8e21f0b9a4d7c3"

@@ -1,5 +1,4 @@
-"""Attaque par dictionnaire — couvre TOUT le cas 1 et TOUT le cas 2,
-plus un large éventail de mots familiers pour le cas 3."""
+
 import itertools
 import time
 

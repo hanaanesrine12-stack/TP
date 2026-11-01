@@ -227,13 +227,19 @@ def get_inbox(pseudo):
         if user_id is None:
             return []
         cursor.execute(
-            "SELECT m.id, m.channel_message, m.algorithm, m.sent_at, "
+            "SELECT m.id, m.channel_message, m.algorithm, m.metadata, m.sent_at, "
             "COALESCE(NULLIF(u.pseudo, ''), u.username) AS sender "
             "FROM messages m JOIN users u ON u.id = m.sender_id "
             "WHERE m.receiver_id = %s ORDER BY m.id DESC",
             (user_id,),
         )
-        return cursor.fetchall()
+        messages = cursor.fetchall()
+        for message in messages:
+            try:
+                message["metadata"] = json.loads(message["metadata"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                message["metadata"] = {}
+        return messages
 
 
 def get_notifications(pseudo, unread_only=False):

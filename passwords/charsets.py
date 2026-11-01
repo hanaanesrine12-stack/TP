@@ -1,4 +1,3 @@
-"""Alphabets et définition des 3 cas du sujet."""
 import string
 
 # Cas 1 : {0, 1}

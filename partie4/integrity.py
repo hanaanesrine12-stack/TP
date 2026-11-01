@@ -35,7 +35,7 @@ class Chiffrement:
     def chiffrer(self, algorithme, texte, cle, sens="droite"):
         """Retourne le message du canal C, au format code:sens:chiffré."""
         if algorithme == "Caesar":
-            chiffre = ciphers.caesar(texte, int(cle), sens)
+            chiffre = ciphers.caesar(texte, ciphers.validate_key(int(cle)), sens)
         elif algorithme == "Hill":
             cle_hill = lire_cle_hill(cle)
             self.positions_format = ciphers.format_positions(texte.upper())
