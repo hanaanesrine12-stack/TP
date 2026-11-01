@@ -273,6 +273,9 @@ class AuthApp(tk.Tk):
         self.holder.pack(padx=30, pady=(0, 30), fill="x")
         self.form = None
         self.show_login()
+        self.update_idletasks()
+        self.geometry("700x%d" % self.winfo_reqheight())
+        self.center()
 
     def _show(self, form, title):
         if self.form is not None:
